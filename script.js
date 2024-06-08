@@ -45,6 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.addEventListener('dragstart', onDragStart);
                 cell.addEventListener('dragover', onDragOver);
                 cell.addEventListener('drop', onDrop);
+
+                // Add touch event listeners
+                cell.addEventListener('touchstart', onTouchStart);
+                cell.addEventListener('touchmove', onTouchMove);
+                cell.addEventListener('touchend', onTouchEnd);
+
                 gridElement.appendChild(cell);
             }
         }
@@ -123,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let draggedCell = null;
+    let touchedCell = null;
 
     function onDragStart(event) {
         draggedCell = event.target;
@@ -156,6 +163,55 @@ document.addEventListener('DOMContentLoaded', () => {
             updateTurnCounter();
             createGrid();
         }
+    }
+
+    function onTouchStart(event) {
+        const touch = event.touches[0];
+        touchedCell = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (touchedCell) {
+            touchedCell.classList.add('touched');
+        }
+    }
+
+    function onTouchMove(event) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        const targetCell = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (targetCell && touchedCell !== targetCell) {
+            touchedCell.classList.remove('touched');
+            touchedCell = targetCell;
+            touchedCell.classList.add('touched');
+        }
+    }
+
+    function onTouchEnd(event) {
+        if (!touchedCell) return;
+
+        const targetRow = touchedCell.dataset.row;
+        const targetCol = touchedCell.dataset.col;
+        const touchedRow = draggedCell.dataset.row;
+        const touchedCol = draggedCell.dataset.col;
+
+        // Check if the swap is valid (only one tile horizontally or vertically)
+        if ((Math.abs(targetRow - touchedRow) === 1 && targetCol === touchedCol) || 
+            (Math.abs(targetCol - touchedCol) === 1 && targetRow === touchedRow)) {
+            
+            // Save the current move to history
+            moveHistory.push({
+                from: { row: touchedRow, col: touchedCol, letter: grid[touchedRow][touchedCol] },
+                to: { row: targetRow, col: targetCol, letter: grid[targetRow][targetCol] }
+            });
+
+            // Swap the letters
+            [grid[targetRow][targetCol], grid[touchedRow][touchedCol]] = [grid[touchedRow][touchedCol], grid[targetRow][targetCol]];
+
+            turnCount++;
+            updateTurnCounter();
+            createGrid();
+        }
+
+        touchedCell.classList.remove('touched');
+        touchedCell = null;
     }
 
     function updateTurnCounter() {
