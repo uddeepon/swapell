@@ -1,66 +1,72 @@
+<script>
 document.addEventListener('DOMContentLoaded', () => {
     const gridElement = document.getElementById('grid');
-    const undoButton = document.getElementById('undoButton');
-    const showCluesButton = document.getElementById('showCluesButton');
+    const undoButton = document.getElementById('undo');
+    const resetButton = document.getElementById('reset');
     const cluesElement = document.getElementById('clues');
-    const rowCluesElement = document.getElementById('rowClues');
-    const colCluesElement = document.getElementById('colClues');
-    const turnCounterElement = document.getElementById('turnCounter');
+    const turnCounterElement = document.getElementById('turns');
+    const cmsDataElement = document.getElementById('cms-data');
+    const isNextElement = document.getElementById('is-next');
 
-    let grid = [
-        ['D', 'A', 'R', 'T'],
-        ['A', 'R', 'E', 'A'],
-        ['R', 'E', 'A', 'L'],
-        ['T', 'A', 'L', 'C']
-    ];
+    gridElement.classList.add('grid');
 
-    const correctWords = {
-        rows: ["DART", "AREA", "REAL", "TALC"],
-        columns: ["DART", "AREA", "REAL", "TALC"]
+    let grid = [];
+    let correctWords = {
+        rows: [],
+        columns: []
     };
+    let hints = [];
 
-    const clues = {
-        rows: ["A small pointed missile", "A region or part", "Genuine", "A soft mineral"],
-        columns: ["A small pointed missile", "A region or part", "Genuine", "A soft mineral"]
-    };
+    // Fetch words and clues from hidden CMS data elements
+    cmsDataElement.querySelectorAll('.word').forEach((wordElement, index) => {
+        const word = wordElement.getAttribute('data-word');
+        const clue = wordElement.getAttribute('data-clue');
+        hints.push(clue);
+        
+        if (!grid[index]) grid[index] = [];
+        for (let i = 0; i < word.length; i++) {
+            grid[index][i] = word[i];
+        }
+        
+        correctWords.rows.push(word);
+    });
+
+    // Generate column words based on the grid
+    for (let col = 0; col < grid[0].length; col++) {
+        let colWord = '';
+        for (let row = 0; row < grid.length; row++) {
+            colWord += grid[row][col];
+        }
+        correctWords.columns.push(colWord);
+    }
 
     let moveHistory = [];
     let turnCount = 0;
     const maxTurns = 6;
+    let selectedCell = null;
+    let alertShown = false;
 
-    showCluesButton.addEventListener('click', () => {
-        cluesElement.style.display = 'block';
-    });
+    cluesElement.textContent = hints.join(', ');
 
     function createGrid() {
         gridElement.innerHTML = '';
         for (let row = 0; row < grid.length; row++) {
             for (let col = 0; col < grid[row].length; col++) {
                 const cell = document.createElement('div');
-                cell.className = 'cell';
+                cell.className = 'letter-block';
                 cell.textContent = grid[row][col];
-                cell.setAttribute('draggable', true);
                 cell.dataset.row = row;
                 cell.dataset.col = col;
+                cell.draggable = true;
+                cell.addEventListener('click', onCellClick);
                 cell.addEventListener('dragstart', onDragStart);
                 cell.addEventListener('dragover', onDragOver);
                 cell.addEventListener('drop', onDrop);
 
-                // Add touch event listeners
-                cell.addEventListener('touchstart', onTouchStart);
-                cell.addEventListener('touchmove', onTouchMove);
-                cell.addEventListener('touchend', onTouchEnd);
-
                 gridElement.appendChild(cell);
             }
         }
-        updateClues();
         checkGrid();
-    }
-
-    function updateClues() {
-        rowCluesElement.textContent = clues.rows.join(', ');
-        colCluesElement.textContent = clues.columns.join(', ');
     }
 
     function checkGrid() {
@@ -92,44 +98,93 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply background colors
         for (let row = 0; row < grid.length; row++) {
             for (let col = 0; col < grid[row].length; col++) {
-                const cell = gridElement.children[row * grid.length + col];
-                if (allCorrect) {
-                    cell.style.backgroundColor = 'green';
-                } else {
-                    cell.style.backgroundColor = 'white';
-                }
+                const cell = gridElement.children[row * grid[row].length + col];
+                cell.style.backgroundColor = allCorrect ? '#b3d9b3' : 'white';
             }
         }
 
         if (allCorrect) {
             setTimeout(() => {
-                alert('Solved!');
+                isNextElement.style.display = 'flex';
             }, 100);
-        } else if (turnCount >= maxTurns && !allCorrect) {
-            alert('You have completed 6 turns.');
+        } else if (turnCount >= maxTurns && !allCorrect && !alertShown) {
+            alertShown = true;
+            alert('You have completed 6 turns. Try again!');
         }
     }
 
-    function controlledJumble() {
-        // Perform exactly 6 swaps to ensure it can be solved in 6 turns
-        const swaps = [
-            { from: [0, 0], to: [0, 1] },
-            { from: [1, 0], to: [2, 0] },
-            { from: [1, 2], to: [1, 3] },
-            { from: [2, 1], to: [2, 2] },
-            { from: [3, 1], to: [3, 2] },
-            { from: [3, 3], to: [3, 2] }
+    function shuffleGrid() {
+        const directions = [
+            { row: -1, col: 0 }, // up
+            { row: 1, col: 0 }, // down
+            { row: 0, col: -1 }, // left
+            { row: 0, col: 1 } // right
         ];
 
-        swaps.forEach(swap => {
-            const from = swap.from;
-            const to = swap.to;
-            [grid[from[0]][from[1]], grid[to[0]][to[1]]] = [grid[to[0]][to[1]], grid[from[0]][from[1]]];
-        });
+        for (let i = 0; i < maxTurns; i++) {
+            let fromRow, fromCol, toRow, toCol, direction;
+
+            do {
+                fromRow = Math.floor(Math.random() * 4);
+                fromCol = Math.floor(Math.random() * 4);
+                direction = directions[Math.floor(Math.random() * directions.length)];
+                toRow = fromRow + direction.row;
+                toCol = fromCol + direction.col;
+            } while (
+                toRow < 0 || toRow >= 4 || toCol < 0 || toCol >= 4 || 
+                (toRow === fromRow && toCol === fromCol)
+            );
+
+            [grid[fromRow][fromCol], grid[toRow][toCol]] = [grid[toRow][toCol], grid[fromRow][fromCol]];
+        }
+    }
+
+    function onCellClick(event) {
+        if (turnCount >= maxTurns) {
+            if (!alertShown) {
+                alert('You have completed 6 turns. Try again!');
+                alertShown = true;
+            }
+            return;
+        }
+
+        const cell = event.target;
+        const row = cell.dataset.row;
+        const col = cell.dataset.col;
+
+        if (selectedCell) {
+            // Check if the swap is valid (only one tile horizontally or vertically)
+            const selectedRow = selectedCell.dataset.row;
+            const selectedCol = selectedCell.dataset.col;
+
+            if ((Math.abs(row - selectedRow) === 1 && col === selectedCol) || 
+                (Math.abs(col - selectedCol) === 1 && row === selectedRow)) {
+                
+                // Save the current move to history
+                moveHistory.push({
+                    from: { row: selectedRow, col: selectedCol, letter: grid[selectedRow][selectedCol] },
+                    to: { row: row, col: col, letter: grid[row][col] }
+                });
+
+                // Swap the letters
+                [grid[row][col], grid[selectedRow][selectedCol]] = [grid[selectedRow][selectedCol], grid[row][col]];
+
+                turnCount++;
+                updateTurnCounter();
+                createGrid();
+            }
+            selectedCell.classList.remove('selected');
+            selectedCell = null;
+        } else {
+            if (selectedCell) {
+                selectedCell.classList.remove('selected');
+            }
+            selectedCell = cell;
+            cell.classList.add('selected');
+        }
     }
 
     let draggedCell = null;
-    let touchedCell = null;
 
     function onDragStart(event) {
         draggedCell = event.target;
@@ -140,6 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function onDrop(event) {
+        if (turnCount >= maxTurns) {
+            if (!alertShown) {
+                alert('You have completed 6 turns. Please try again!');
+                alertShown = true;
+            }
+            return;
+        }
+
         const targetCell = event.target;
         const targetRow = targetCell.dataset.row;
         const targetCol = targetCell.dataset.col;
@@ -165,59 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function onTouchStart(event) {
-        const touch = event.touches[0];
-        touchedCell = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (touchedCell) {
-            touchedCell.classList.add('touched');
-        }
-    }
-
-    function onTouchMove(event) {
-        event.preventDefault();
-        const touch = event.touches[0];
-        const targetCell = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (targetCell && touchedCell !== targetCell) {
-            touchedCell.classList.remove('touched');
-            touchedCell = targetCell;
-            touchedCell.classList.add('touched');
-        }
-    }
-
-    function onTouchEnd(event) {
-        if (!touchedCell) return;
-
-        const targetRow = touchedCell.dataset.row;
-        const targetCol = touchedCell.dataset.col;
-        const touchedRow = draggedCell.dataset.row;
-        const touchedCol = draggedCell.dataset.col;
-
-        // Check if the swap is valid (only one tile horizontally or vertically)
-        if ((Math.abs(targetRow - touchedRow) === 1 && targetCol === touchedCol) || 
-            (Math.abs(targetCol - touchedCol) === 1 && targetRow === touchedRow)) {
-            
-            // Save the current move to history
-            moveHistory.push({
-                from: { row: touchedRow, col: touchedCol, letter: grid[touchedRow][touchedCol] },
-                to: { row: targetRow, col: targetCol, letter: grid[targetRow][targetCol] }
-            });
-
-            // Swap the letters
-            [grid[targetRow][targetCol], grid[touchedRow][touchedCol]] = [grid[touchedRow][touchedCol], grid[targetRow][targetCol]];
-
-            turnCount++;
-            updateTurnCounter();
-            createGrid();
-        }
-
-        touchedCell.classList.remove('touched');
-        touchedCell = null;
-    }
-
     function updateTurnCounter() {
-        turnCounterElement.textContent = turnCount;
-        if (turnCount >= maxTurns && !checkAllCorrect()) {
-            alert('You have completed 6 turns.');
+        turnCounterElement.textContent = `${turnCount}/${maxTurns}`;
+        if (turnCount >= maxTurns && !checkAllCorrect() && !alertShown) {
+            alertShown = true;
+            alert('You have completed 6 turns. Try again!');
         }
     }
 
@@ -245,19 +260,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetGame() {
         moveHistory = [];
         turnCount = 0;
+        alertShown = false;
         updateTurnCounter();
-        grid = [
-            ['D', 'A', 'R', 'T'],
-            ['A', 'R', 'E', 'A'],
-            ['R', 'E', 'A', 'L'],
-            ['T', 'A', 'L', 'C']
-        ];
-        controlledJumble();
+        shuffleGrid();
         createGrid();
     }
 
     undoButton.addEventListener('click', () => {
-        if (moveHistory.length > 0) {
+        if (moveHistory.length > 0 && turnCount > 0) {
             const lastMove = moveHistory.pop();
             grid[lastMove.from.row][lastMove.from.col] = lastMove.from.letter;
             grid[lastMove.to.row][lastMove.to.col] = lastMove.to.letter;
@@ -267,6 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    controlledJumble();
-    createGrid();
+    resetButton.addEventListener('click', resetGame);
+
+    // Initially load the grid in the jumbled state
+    resetGame();
 });
+</script>
